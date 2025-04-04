@@ -1,15 +1,19 @@
 import { Signal, effect } from './signal';
 
-type ElementConfig<T extends keyof HTMLElementTagNameMap = "div"> = {
-  tag?: T;
+type WithSignal<T> = {
+  [K in keyof T]?: T[K] | Signal<T[K]>;
+};
+
+type ElementConfig<T extends keyof HTMLElementTagNameMap> = {
+  tag: T;
   style?: Partial<CSSStyleDeclaration> | string;
   children?: Array<{ [K in keyof HTMLElementTagNameMap]: ElementConfig<K> }[keyof HTMLElementTagNameMap]>;
-} & Partial<Omit<HTMLElementTagNameMap[T], "style" | "children">>;
+} & WithSignal<Partial<Omit<HTMLElementTagNameMap[T], "style" | "children">>>;
 
-export function createElement<T extends keyof HTMLElementTagNameMap>(config: ElementConfig<T> & { tag: T }): HTMLElementTagNameMap[T];
-export function createElement(config: ElementConfig): HTMLElementTagNameMap["div"];
-export function createElement(config: any): any {
-  const result = document.createElement(config.tag ?? "div") as HTMLElementTagNameMap[T];
+export function createElement<T extends keyof HTMLElementTagNameMap>(
+  config: ElementConfig<T>
+): HTMLElementTagNameMap[T] {
+  const result = document.createElement(config.tag) as HTMLElementTagNameMap[T];
 
   for (const attributeName in config) {
     if (attributeName === "tag" || attributeName === "children") continue;

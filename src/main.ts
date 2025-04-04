@@ -1,6 +1,6 @@
 import { createElement } from './element';
 import { html } from './html';
-import { signal } from './signal';
+import { computed, signal } from './signal';
 
   // Reactive state
   const count = signal(0);
@@ -13,8 +13,10 @@ import { signal } from './signal';
     </div>`;
 
     const counterElement = createElement({
+      tag: "div",
       children: [{
-        textContent: count,
+        tag: "h1",
+        textContent: computed<string|null|undefined>(() => `Counter: ${count()}`),
       }, {
         tag: "button",
         textContent: "Increment",
@@ -27,9 +29,11 @@ import { signal } from './signal';
     });
 
   const canvas = createElement({
+    tag: "div",
     style: { width: "400px", height: "400px", backgroundColor: "black" },
     children: [
       {
+        tag: "div",
         style: { width: "100px", height: "100px", backgroundColor: "red" },
         onclick: () => {count((val) => val + 1);},
         children: [{ 
@@ -40,16 +44,19 @@ import { signal } from './signal';
             height: "50px", backgroundColor: "yellow" } }],
       },
       {
-        textContent: count,
+        tag: 'div',
+        textContent: computed<string|null|undefined>(() => `Counter: ${count()}`),
         style: { width: "100px", height: "100px", backgroundColor: "green" },
       },
       {
+        tag: 'div',
         style: { width: "100px", height: "100px", backgroundColor: "blue" },
       },
     ],
   });
 
   // Mount the app to the DOM
+  document.body.append(...app);
   document.body.append(counterElement);
   document.body.append(canvas);
 

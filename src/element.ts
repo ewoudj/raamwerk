@@ -1,7 +1,8 @@
 import { Signal, effect } from './signal';
 
+// Improved WithSignal type that preserves the exact type when wrapped in Signal
 type WithSignal<T> = {
-  [K in keyof T]?: T[K] | Signal<T[K]>;
+  [K in keyof T]?: T[K] | Signal<NonNullable<T[K]>> | null | undefined;
 };
 
 type ElementConfig<T extends keyof HTMLElementTagNameMap> = {
@@ -10,7 +11,7 @@ type ElementConfig<T extends keyof HTMLElementTagNameMap> = {
   children?: Array<{ [K in keyof HTMLElementTagNameMap]: ElementConfig<K> }[keyof HTMLElementTagNameMap]>;
 } & WithSignal<Partial<Omit<HTMLElementTagNameMap[T], "style" | "children">>>;
 
-export function createElement<T extends keyof HTMLElementTagNameMap>(
+export function element<T extends keyof HTMLElementTagNameMap>(
   config: ElementConfig<T>
 ): HTMLElementTagNameMap[T] {
   const result = document.createElement(config.tag) as HTMLElementTagNameMap[T];
@@ -48,7 +49,7 @@ export function createElement<T extends keyof HTMLElementTagNameMap>(
 
   if (config.children) {
     for (const childConfig of config.children) {
-      const childElement = createElement(childConfig);
+      const childElement = element(childConfig);
       result.appendChild(childElement);
     }
   }

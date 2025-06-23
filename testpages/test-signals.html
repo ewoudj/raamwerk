@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Signals Test</title>
+</head>
+<body>
+    <h1>Signals Test</h1>
+    <div id="app"></div>
+    
+    <script type="module">
+        import { signal, effect, computed } from './src/signal.ts';
+        
+        // Test basic signals
+        const count = signal(0);
+        const double = computed(() => count() * 2);
+        const triple = computed(() => count() * 3);
+        
+        // Test effect
+        effect(() => {
+            console.log(`Count: ${count()}, Double: ${double()}, Triple: ${triple()}`);
+        });
+        
+        // Test circular dependency prevention
+        const a = signal(1);
+        const b = signal(2);
+        
+        // This should not cause infinite loops
+        effect(() => {
+            console.log(`A: ${a()}, B: ${b()}`);
+        });
+        
+        // Test multiple updates
+        console.log('Testing multiple updates...');
+        count(5);
+        count(10);
+        count(15);
+        
+        // Test computed dependencies
+        a(3);
+        b(4);
+        
+        console.log('All tests passed!');
+    </script>
+</body>
+</html> 

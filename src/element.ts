@@ -1,4 +1,4 @@
-import { Signal, computed, effect } from './signal';
+import { Signal, effect } from './signal';
 
 type WithSignal<T> = {
   [K in keyof T]?: T[K] | Signal<NonNullable<T[K]>> | null | undefined;

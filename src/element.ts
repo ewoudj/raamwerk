@@ -123,15 +123,30 @@ export function element<T extends keyof HTMLElementTagNameMap>(
           typeof attributeValue === "function" &&
           (attributeValue as any).name === 'signalFn'
         ) {
+          // Initial value setting - check if the property exists first
+          if (attributeName in result) {
+            (result as any)[attributeName] = attributeValue();
+          }
+          
+          // Update the DOM when the signal changes
+          effect(() => {
+            const newValue = attributeValue();
+            if (attributeName in result && (result as any)[attributeName] !== newValue) {
+              (result as any)[attributeName] = newValue;
+            }
+          });
+          
+          // Update the signal when the input changes
           result.addEventListener("input", (event) => {
-            // Prevent infinite loops by checking if we're already updating from signal
             if (isUpdatingFromSignal) return;
             
             try {
               isUpdatingFromSignal = true;
               const target = event.target as HTMLInputElement;
-              const newValue = target[attributeName as keyof HTMLInputElement];
-              (attributeValue as Signal<any>)(newValue);
+              if (attributeName in target) {
+                const newValue = target[attributeName as keyof HTMLInputElement];
+                (attributeValue as Signal<any>)(newValue);
+              }
             } finally {
               // Reset the flag after a short delay to allow the signal update to complete
               setTimeout(() => {

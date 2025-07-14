@@ -53,6 +53,7 @@ function batchUpdate(updates: (() => void)[]) {
   }
 }
 
+// Create a signal that can be used to store and update values reactively
 export function signal<T>(value?: T): Signal<T> {
   const signalFn: Signal<T> = (newVal?: T | ((prev: T) => T)) => {
     if (newVal === undefined) {
@@ -93,6 +94,7 @@ export function signal<T>(value?: T): Signal<T> {
   return signalFn;
 }
 
+// Create a signal that can be used in effects
 export function effect(fn: EffectFunction): () => void {
   let disposed = false;
   
@@ -125,6 +127,7 @@ export function effect(fn: EffectFunction): () => void {
   };
 }
 
+// Create a computed signal that updates when dependencies change
 export function computed<T>(fn: () => T): Signal<T> {
   const s = signal<T>();
   s.dispose = effect(() => s(fn()));
@@ -135,3 +138,10 @@ export function computed<T>(fn: () => T): Signal<T> {
 export function batch(fn: () => void) {
   batchUpdate([fn]);
 }
+
+// Utility type to allow signals in object properties
+export type WithSignal<T> = {
+  [K in keyof T]?: T[K] | Signal<NonNullable<T[K]>> | null | undefined;
+};
+
+

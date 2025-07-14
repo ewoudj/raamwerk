@@ -1,18 +1,10 @@
-import { Signal, effect } from './signal';
+import {WithSignal, Signal, effect } from './signal';
+import {renderStyle, StyleValue } from './style';
 
-type WithSignal<T> = {
-  [K in keyof T]?: T[K] | Signal<NonNullable<T[K]>> | null | undefined;
-};
-
-// Updated type definition with proper support for computed styles
+// Simplified ElementConfig using the StyleValue type
 type ElementConfig<T extends keyof HTMLElementTagNameMap> = {
   tag: T;
-  style?: WithSignal<Partial<CSSStyleDeclaration>> | 
-          Signal<WithSignal<Partial<CSSStyleDeclaration>>> | 
-          string | 
-          Signal<string> |
-          (() => string) | // Support for computed functions returning strings
-          (() => string | Signal<string>); // Support for stylesheet functions
+  style?: StyleValue;
   children?: Array<{ [K in keyof HTMLElementTagNameMap]: ElementConfig<K> }[keyof HTMLElementTagNameMap]> | 
             Signal<Array<{ [K in keyof HTMLElementTagNameMap]: ElementConfig<K> }[keyof HTMLElementTagNameMap]>>;
 } & WithSignal<Partial<Omit<HTMLElementTagNameMap[T], "style" | "children">>>;
@@ -27,148 +19,33 @@ export function element<T extends keyof HTMLElementTagNameMap>(
 
   // Handle attributes
   for (const attributeName in config) {
-    if (attributeName === "tag" || attributeName === "children") continue;
-    
-    // Special handling for the style attribute
-    if (attributeName === "style") {
-      const styleValue = config.style;
-      
-      if (styleValue !== undefined) {
-        // Case 1: style is a signal function (either from signal() or computed())
-        if (typeof styleValue === "function") {
-          // Check if it's a signal function (has name 'signalFn')
-          const isSignalFn = styleValue.name === 'signalFn';
-          
-          // Handle both signal and computed functions
-          effect(() => {
-            // For computed functions, call directly; for signals, call as function
-            const resolvedStyle = isSignalFn ? styleValue() : styleValue();
-            
-            // Clear existing inline styles
-            result.removeAttribute('style');
-            
-            // If style is a string, set it directly
-            if (typeof resolvedStyle === 'string') {
-              result.setAttribute('style', resolvedStyle);
-            } 
-            // If style is an object, apply each property
-            else if (typeof resolvedStyle === 'object' && resolvedStyle !== null) {
-              Object.entries(resolvedStyle).forEach(([prop, value]) => {
-                // Handle nested signals in style object
-                if (typeof value === 'function') {
-                  effect(() => {
-                    // Fix: Call value without arguments but cast it to appropriate callable type
-                    const propValue = (value as () => any)();
-                    if (propValue !== undefined) {
-                      result.style.setProperty(prop, String(propValue));
-                    }
-                  });
-                } else {
-                  result.style.setProperty(prop, String(value));
-                }
-              });
-            }
-          });
-        }
-        // Case 2: style is a string directly
-        else if (typeof styleValue === 'string') {
-          result.setAttribute('style', styleValue);
-        }
-        // Case 3: style is an object with potential signal properties
-        else if (typeof styleValue === 'object' && styleValue !== null) {
-          Object.entries(styleValue).forEach(([prop, value]) => {
-            // Handle signal for individual style property
-            if (typeof value === 'function') {
-              effect(() => {
-                // Fix: Call value without arguments but cast it to appropriate callable type
-                const propValue = (value as () => any)();
-                if (propValue !== undefined) {
-                  result.style.setProperty(prop, String(propValue));
-                }
-              });
-            } else {
-              // Apply the style property directly
-              (result.style as any)[prop] = value;
-            }
-          });
-        }
-      }
-    } else {
-      const attributeValue = config[attributeName as keyof ElementConfig<T>];
-
-      if (attributeValue !== undefined) {
-        // Handle event listeners (onclick, onchange, oninput, etc.)
-        if (attributeName.startsWith('on') && typeof attributeValue === 'function') {
-          const eventName = attributeName.slice(2).toLowerCase(); // Remove 'on' prefix
-          result.addEventListener(eventName, attributeValue as EventListener);
-        }
-        // Handle regular attributes
-        else if (typeof attributeValue === "function") {
-          // Check if it's a signal function or computed
-          const isSignalFn = attributeValue.name === 'signalFn';
-          
-          // If the attribute is a signal or computed, bind it reactively
-          effect(() => {
-            if (!isUpdatingFromSignal) {
-              (result as any)[attributeName] = isSignalFn ? attributeValue() : attributeValue();
-            }
-          });
-        } else {
-          (result as any)[attributeName] = attributeValue;
-        }
-
-        // Two-way binding for form elements (input, textarea, select)
-        if (
-          ["value", "checked"].includes(attributeName) &&
-          typeof attributeValue === "function" &&
-          (attributeValue as any).name === 'signalFn'
-        ) {
-          // Initial value setting - check if the property exists first
-          if (attributeName in result) {
-            (result as any)[attributeName] = attributeValue();
-          }
-          
-          // Update the DOM when the signal changes
-          effect(() => {
-            const newValue = attributeValue();
-            if (attributeName in result && (result as any)[attributeName] !== newValue) {
-              (result as any)[attributeName] = newValue;
-            }
-          });
-          
-          // Update the signal when the input changes
-          result.addEventListener("input", (event) => {
-            if (isUpdatingFromSignal) return;
-            
-            try {
-              isUpdatingFromSignal = true;
-              const target = event.target as HTMLInputElement;
-              if (attributeName in target) {
-                const newValue = target[attributeName as keyof HTMLInputElement];
-                (attributeValue as Signal<any>)(newValue);
-              }
-            } finally {
-              // Reset the flag after a short delay to allow the signal update to complete
-              setTimeout(() => {
-                isUpdatingFromSignal = false;
-              }, 0);
-            }
-          });
-        }
-      }
+    if (attributeName === "tag") {
+      continue; // Skip the tag attribute
+    }
+    else if (attributeName === "children"){
+      renderChildren<T>(config, result);
+    }
+    else if (attributeName === "style") {
+      renderStyle(config.style, result);
+    } 
+    else {
+      isUpdatingFromSignal = renderAttribute<T>(config, attributeName, result, isUpdatingFromSignal);
     }
   }
 
-  // Handle children
+  return result;
+}
+
+function renderChildren<T extends keyof HTMLElementTagNameMap>(config: ElementConfig<T>, result: HTMLObjectElement | HTMLElement | HTMLAnchorElement | HTMLAreaElement | HTMLAudioElement | HTMLBaseElement | HTMLQuoteElement | HTMLBodyElement | HTMLBRElement | HTMLButtonElement | HTMLCanvasElement | HTMLTableCaptionElement | HTMLTableColElement | HTMLDataElement | HTMLDataListElement | HTMLModElement | HTMLDetailsElement | HTMLDialogElement | HTMLDivElement | HTMLDListElement | HTMLEmbedElement | HTMLFieldSetElement | HTMLFormElement | HTMLHeadingElement | HTMLHeadElement | HTMLHRElement | HTMLHtmlElement | HTMLIFrameElement | HTMLImageElement | HTMLInputElement | HTMLLabelElement | HTMLLegendElement | HTMLLIElement | HTMLLinkElement | HTMLMapElement | HTMLMenuElement | HTMLMetaElement | HTMLMeterElement | HTMLOListElement | HTMLOptGroupElement | HTMLOptionElement | HTMLOutputElement | HTMLParagraphElement | HTMLPictureElement | HTMLPreElement | HTMLProgressElement | HTMLScriptElement | HTMLSelectElement | HTMLSlotElement | HTMLSourceElement | HTMLSpanElement | HTMLStyleElement | HTMLTableElement | HTMLTableSectionElement | HTMLTableCellElement | HTMLTemplateElement | HTMLTextAreaElement | HTMLTimeElement | HTMLTitleElement | HTMLTableRowElement | HTMLTrackElement | HTMLUListElement | HTMLVideoElement) {
   if (config.children) {
     if (typeof config.children === "function" && config.children.name === 'signalFn') {
       effect(() => {
         while (result.firstChild) {
           result.removeChild(result.firstChild);
         }
-        
+
         const childrenArray = (config.children as Signal<ElementConfig<any>[]>)();
-        
+
         for (const childConfig of childrenArray) {
           if (childConfig) {
             const childElement = element(childConfig);
@@ -183,10 +60,10 @@ export function element<T extends keyof HTMLElementTagNameMap>(
         while (result.firstChild) {
           result.removeChild(result.firstChild);
         }
-        
+
         const items = wrapper.signal();
         const childrenArray = items.map((item: any, index: number) => wrapper.template(item, index));
-        
+
         for (const childConfig of childrenArray) {
           if (childConfig) {
             const childElement = element(childConfig);
@@ -203,11 +80,74 @@ export function element<T extends keyof HTMLElementTagNameMap>(
       }
     }
   }
-
-  return result;
 }
 
-// Updated each function to correctly integrate with ElementConfig
+function renderAttribute<T extends keyof HTMLElementTagNameMap>(config: ElementConfig<T>, attributeName: string, result: HTMLObjectElement | HTMLElement | HTMLStyleElement | HTMLAnchorElement | HTMLAreaElement | HTMLAudioElement | HTMLBaseElement | HTMLQuoteElement | HTMLBodyElement | HTMLBRElement | HTMLButtonElement | HTMLCanvasElement | HTMLTableCaptionElement | HTMLTableColElement | HTMLDataElement | HTMLDataListElement | HTMLModElement | HTMLDetailsElement | HTMLDialogElement | HTMLDivElement | HTMLDListElement | HTMLEmbedElement | HTMLFieldSetElement | HTMLFormElement | HTMLHeadingElement | HTMLHeadElement | HTMLHRElement | HTMLHtmlElement | HTMLIFrameElement | HTMLImageElement | HTMLInputElement | HTMLLabelElement | HTMLLegendElement | HTMLLIElement | HTMLLinkElement | HTMLMapElement | HTMLMenuElement | HTMLMetaElement | HTMLMeterElement | HTMLOListElement | HTMLOptGroupElement | HTMLOptionElement | HTMLOutputElement | HTMLParagraphElement | HTMLPictureElement | HTMLPreElement | HTMLProgressElement | HTMLScriptElement | HTMLSelectElement | HTMLSlotElement | HTMLSourceElement | HTMLSpanElement | HTMLTableElement | HTMLTableSectionElement | HTMLTableCellElement | HTMLTemplateElement | HTMLTextAreaElement | HTMLTimeElement | HTMLTitleElement | HTMLTableRowElement | HTMLTrackElement | HTMLUListElement | HTMLVideoElement, isUpdatingFromSignal: boolean) {
+  const attributeValue = config[attributeName as keyof ElementConfig<T>];
+
+  if (attributeValue !== undefined) {
+    // Handle event listeners (onclick, onchange, oninput, etc.)
+    if (attributeName.startsWith('on') && typeof attributeValue === 'function') {
+      const eventName = attributeName.slice(2).toLowerCase(); // Remove 'on' prefix
+      result.addEventListener(eventName, attributeValue as EventListener);
+    }
+
+    // Handle regular attributes
+    else if (typeof attributeValue === "function") {
+      // Check if it's a signal function or computed
+      const isSignalFn = attributeValue.name === 'signalFn';
+
+      // If the attribute is a signal or computed, bind it reactively
+      effect(() => {
+        if (!isUpdatingFromSignal) {
+          (result as any)[attributeName] = isSignalFn ? attributeValue() : attributeValue();
+        }
+      });
+    } else {
+      (result as any)[attributeName] = attributeValue;
+    }
+
+    // Two-way binding for form elements (input, textarea, select)
+    if (["value", "checked"].includes(attributeName) &&
+      typeof attributeValue === "function" &&
+      (attributeValue as any).name === 'signalFn') {
+      // Initial value setting - check if the property exists first
+      if (attributeName in result) {
+        (result as any)[attributeName] = attributeValue();
+      }
+
+      // Update the DOM when the signal changes
+      effect(() => {
+        const newValue = attributeValue();
+        if (attributeName in result && (result as any)[attributeName] !== newValue) {
+          (result as any)[attributeName] = newValue;
+        }
+      });
+
+      // Update the signal when the input changes
+      result.addEventListener("input", (event) => {
+        if (isUpdatingFromSignal) return;
+
+        try {
+          isUpdatingFromSignal = true;
+          const target = event.target as HTMLInputElement;
+          if (attributeName in target) {
+            const newValue = target[attributeName as keyof HTMLInputElement];
+            (attributeValue as Signal<any>)(newValue);
+          }
+        } finally {
+          // Reset the flag after a short delay to allow the signal update to complete
+          setTimeout(() => {
+            isUpdatingFromSignal = false;
+          }, 0);
+        }
+      });
+    }
+  }
+  return isUpdatingFromSignal;
+}
+
+// Reactive each function to create lists of elements
 export function each<T, K>(
   val: Array<T> | Signal<Array<T>>,
   getKey: (item: T, index: number) => K,

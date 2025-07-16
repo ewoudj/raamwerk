@@ -2,7 +2,7 @@ import {WithSignal, Signal, effect } from './signal';
 import {renderStyle, StyleValue } from './style';
 
 // Simplified ElementConfig using the StyleValue type
-type ElementConfig<T extends keyof HTMLElementTagNameMap> = {
+export type ElementConfig<T extends keyof HTMLElementTagNameMap> = {
   tag: T;
   style?: StyleValue;
   children?: Array<{ [K in keyof HTMLElementTagNameMap]: ElementConfig<K> }[keyof HTMLElementTagNameMap]> | 
